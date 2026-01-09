@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Job Finder - AI-Powered Resume Matcher</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fab fa-linkedin"></i>
+                    <h1>LinkedIn Job Finder</h1>
+                </div>
+                <p class="tagline">AI-Powered Resume Matching for LinkedIn Jobs</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        
+        <!-- Upload Section -->
+        <section id="uploadSection" class="section upload-section">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-file-upload"></i>
+                    <h2>Upload Your Resume</h2>
+                </div>
+                <div class="card-body">
+                    <div class="upload-area" id="uploadArea">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Drag & drop your resume here or click to browse</p>
+                        <p class="upload-hint">PDF format only</p>
+                        <input type="file" id="resumeInput" accept=".pdf" hidden>
+                        <button class="btn btn-primary" id="browseBtn">
+                            <i class="fas fa-folder-open"></i> Browse Files
+                        </button>
+                    </div>
+                    
+                    <div id="fileInfo" class="file-info" style="display: none;">
+                        <i class="fas fa-file-pdf"></i>
+                        <span id="fileName"></span>
+                        <button class="btn-icon" id="removeFile">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <button class="btn btn-success btn-large" id="uploadBtn" style="display: none;">
+                        <i class="fas fa-upload"></i> Process Resume
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Processing Section -->
+        <section id="processingSection" class="section" style="display: none;">
+            <div class="card">
+                <div class="card-body text-center">
+                    <div class="spinner"></div>
+                    <h2>Processing Your Resume...</h2>
+                    <p id="processingStatus">Extracting skills and generating search queries</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Skills & Queries Section -->
+        <section id="skillsSection" class="section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-check-circle success-icon"></i>
+                    <h2>Resume Processed Successfully!</h2>
+                </div>
+                <div class="card-body">
+                    <div class="info-box">
+                        <strong>Job ID:</strong> 
+                        <code id="jobId"></code>
+                        <button class="btn-icon" id="copyJobId" title="Copy Job ID">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+
+                    <div class="skills-container">
+                        <h3><i class="fas fa-code"></i> Detected Skills</h3>
+                        <div id="skillsList" class="tags-container"></div>
+                    </div>
+
+                    <div class="queries-container">
+                        <h3><i class="fas fa-search"></i> Search Queries</h3>
+                        <div id="queriesList" class="tags-container"></div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <div>
+                            <strong>Next Step:</strong>
+                            <p>Run the LinkedIn scraper agent with this Job ID to collect relevant posts.</p>
+                            <code>python local_agent.py</code>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" id="startPollingBtn">
+                        <i class="fas fa-sync-alt"></i> I've Started the Agent - Check for Results
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Waiting Section -->
+        <section id="waitingSection" class="section" style="display: none;">
+            <div class="card">
+                <div class="card-body text-center">
+                    <div class="spinner"></div>
+                    <h2>Waiting for LinkedIn Data...</h2>
+                    <p>Polling every 3 seconds for new results</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p id="waitingStatus">No results yet...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="resultsSection" class="section" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h2>LinkedIn Job Posts Found</h2>
+                </div>
+                <div class="card-body">
+                    <div class="results-stats">
+                        <div class="stat-box">
+                            <i class="fas fa-briefcase"></i>
+                            <div>
+                                <span class="stat-number" id="totalPosts">0</span>
+                                <span class="stat-label">Total Posts</span>
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <i class="fas fa-search"></i>
+                            <div>
+                                <span class="stat-number" id="totalQueries">0</span>
+                                <span class="stat-label">Queries Used</span>
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <i class="fas fa-code"></i>
+                            <div>
+                                <span class="stat-number" id="totalSkills">0</span>
+                                <span class="stat-label">Skills Matched</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="results-actions">
+                        <button class="btn btn-primary" id="rankBtn">
+                            <i class="fas fa-sort-amount-down"></i> Rank by Relevance
+                        </button>
+                        <button class="btn btn-secondary" id="exportBtn">
+                            <i class="fas fa-download"></i> Export Results
+                        </button>
+                        <button class="btn btn-secondary" id="resetBtn">
+                            <i class="fas fa-redo"></i> Start Over
+                        </button>
+                    </div>
+
+                    <div id="resultsContainer" class="results-container"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 LinkedIn Job Finder | Built with ❤️ for job seekers</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
