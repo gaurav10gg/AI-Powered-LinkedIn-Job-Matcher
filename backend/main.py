@@ -11,12 +11,10 @@ from resume_parser import extract_text_from_pdf
 from skill_extractor import extract_skills_and_topics
 from query_builder_local_llm import build_search_queries  # This will use Ollama now!
 
-# =========================
-# APP SETUP
-# =========================
+
 app = FastAPI(title="Resume → LinkedIn Pipeline API")
 
-# Enable CORS
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,13 +23,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# STORAGE
-# =========================
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Check if we're in backend folder, adjust path accordingly
+
 if os.path.basename(os.getcwd()) == 'backend':
     FRONTEND_DIR = "../frontend"
 else:
@@ -43,18 +38,13 @@ if not os.path.exists(FRONTEND_DIR):
 
 job_store = {}
 
-# =========================
-# MOUNT STATIC FILES (CSS, JS)
-# =========================
+
 if os.path.exists(FRONTEND_DIR):
     try:
         app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
     except Exception as e:
         print(f"Warning: Could not mount static files: {e}")
 
-# =========================
-# SERVE FRONTEND (Root path serves HTML)
-# =========================
 @app.get("/", include_in_schema=False)
 def serve_frontend():
     html_path = os.path.join(FRONTEND_DIR, "index.html")
@@ -83,9 +73,7 @@ def serve_style():
         return FileResponse(css_path, media_type="text/css")
     return JSONResponse(status_code=404, content={"error": "style.css not found"})
 
-# =========================
-# HEALTH CHECK
-# =========================
+
 @app.get("/health")
 def health():
     return {
@@ -95,9 +83,7 @@ def health():
         "llm_backend": "Ollama (Local)"
     }
 
-# =========================
-# PROCESS RESUME
-# =========================
+
 @app.post("/process-resume")
 async def process_resume(file: UploadFile = File(...)):
     """
@@ -106,18 +92,18 @@ async def process_resume(file: UploadFile = File(...)):
     print(f"\n📄 Processing resume: {file.filename}")
     
     try:
-        # Validate file type
+        
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(
                 status_code=400,
                 detail="Only PDF files are supported"
             )
 
-        # Generate job ID
+        
         job_id = str(uuid.uuid4())
         print(f"🆔 Generated Job ID: {job_id}")
 
-        # Save resume
+        
         file_path = os.path.join(UPLOAD_DIR, f"{job_id}_{file.filename}")
         
         with open(file_path, "wb") as f:
@@ -126,7 +112,7 @@ async def process_resume(file: UploadFile = File(...)):
         
         print(f"💾 Saved resume to: {file_path}")
 
-        # Extract resume text
+        
         print("📖 Extracting text from PDF...")
         resume_text = extract_text_from_pdf(file_path)
 
@@ -139,7 +125,7 @@ async def process_resume(file: UploadFile = File(...)):
 
         print(f"✅ Extracted {len(resume_text)} characters")
 
-        # Extract skills
+        
         print("🔍 Extracting skills...")
         extracted = extract_skills_and_topics(resume_text)
         skills = extracted.get("skills", [])
@@ -150,7 +136,7 @@ async def process_resume(file: UploadFile = File(...)):
 
         print(f"✅ Found {len(skills)} skills: {skills[:5]}")
 
-        # Build LinkedIn queries using Ollama
+        
         print("🤖 Generating search queries with local LLM (Ollama)...")
         print("⏳ This may take 10-30 seconds for the first query...")
         
@@ -162,11 +148,11 @@ async def process_resume(file: UploadFile = File(...)):
         
         print(f"✅ Generated {len(queries)} queries")
 
-        # Print sample queries for debugging
+        
         if queries:
             print(f"📋 Sample queries: {queries[:3]}")
 
-        # Store job
+        
         job_store[job_id] = {
             "status": "waiting_for_linkedin",
             "skills": skills,
@@ -196,9 +182,6 @@ async def process_resume(file: UploadFile = File(...)):
             detail=f"Error processing resume: {str(e)}"
         )
 
-# =========================
-# GET JOB DETAILS (for local agent)
-# =========================
 @app.get("/api/results/{job_id}")
 async def get_job_for_agent(job_id: str):
     """
@@ -215,9 +198,7 @@ async def get_job_for_agent(job_id: str):
         "queries": job.get("queries", [])
     }
 
-# =========================
-# SUBMIT RESULTS (from local agent)
-# =========================
+
 @app.post("/api/submit-results/{job_id}")
 async def submit_results(job_id: str, payload: dict = Body(...)):
     """
@@ -252,9 +233,6 @@ async def submit_results(job_id: str, payload: dict = Body(...)):
         print(f"❌ Error submitting results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# =========================
-# GET RESULTS (for frontend polling)
-# =========================
 @app.get("/results/{job_id}")
 async def get_results(job_id: str):
     """
@@ -282,9 +260,6 @@ async def get_results(job_id: str):
         print(f"❌ Error getting results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# =========================
-# RANK RESULTS
-# =========================
 @app.get("/rank/{job_id}")
 async def rank_results(job_id: str, top_k: int = 20):
     """
@@ -321,9 +296,6 @@ async def rank_results(job_id: str, top_k: int = 20):
         print(f"❌ Error ranking results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# =========================
-# GET ALL JOBS
-# =========================
 @app.get("/jobs")
 async def get_all_jobs():
     """
@@ -345,9 +317,7 @@ async def get_all_jobs():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# =========================
-# STARTUP EVENT
-# =========================
+
 @app.on_event("startup")
 async def startup_event():
     print("\n" + "="*60)
@@ -357,7 +327,7 @@ async def startup_event():
     print(f"🌐 Frontend directory: {FRONTEND_DIR}")
     print(f"🤖 LLM Backend: Ollama (Local)")
     
-    # Check if Ollama is running
+    
     try:
         import requests
         response = requests.get("http://localhost:11434/api/tags", timeout=2)
@@ -376,7 +346,7 @@ async def startup_event():
         print("   Start it with: ollama serve")
         print("   Then: ollama pull llama2")
     
-    # Check if frontend files exist
+    
     required_files = ["index.html", "script.js", "style.css"]
     missing_files = [f for f in required_files if not os.path.exists(os.path.join(FRONTEND_DIR, f))]
     
