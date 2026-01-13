@@ -29,10 +29,8 @@ const startPollingBtn = document.getElementById('startPollingBtn');
 const waitingStatus = document.getElementById('waitingStatus');
 const totalPosts = document.getElementById('totalPosts');
 const totalQueries = document.getElementById('totalQueries');
-const totalSkills = document.getElementById('totalSkills');
 const resultsContainer = document.getElementById('resultsContainer');
 
-const rankBtn = document.getElementById('rankBtn');
 const exportBtn = document.getElementById('exportBtn');
 const resetBtn = document.getElementById('resetBtn');
 
@@ -257,13 +255,12 @@ function displayResults(data) {
     // Update stats
     totalPosts.textContent = currentResults.length;
     totalQueries.textContent = data.queries?.length || 0;
-    totalSkills.textContent = data.skills?.length || 0;
     
     // Render posts
     renderPosts(currentResults);
 }
 
-function renderPosts(posts, ranked = false) {
+function renderPosts(posts) {
     resultsContainer.innerHTML = '';
     
     if (posts.length === 0) {
@@ -274,10 +271,6 @@ function renderPosts(posts, ranked = false) {
     posts.forEach((post, index) => {
         const card = document.createElement('div');
         card.className = 'result-card';
-        
-        const scoreHtml = ranked && post.score !== undefined 
-            ? `<span class="result-score">🎯 Score: ${(post.score * 100).toFixed(1)}%</span>`
-            : '';
         
         const linksHtml = post.links && post.links.length > 0
             ? `
@@ -299,7 +292,6 @@ function renderPosts(posts, ranked = false) {
                     </div>
                     <span class="result-query">${escapeHtml(post.query || 'N/A')}</span>
                 </div>
-                ${scoreHtml}
             </div>
             <div class="result-content">
                 ${escapeHtml(post.content || 'No content')}
@@ -310,42 +302,6 @@ function renderPosts(posts, ranked = false) {
         resultsContainer.appendChild(card);
     });
 }
-
-// =========================
-// RANK BY RELEVANCE
-// =========================
-rankBtn.addEventListener('click', async () => {
-    if (!currentJobId) {
-        showNotification('No job ID found', 'error');
-        return;
-    }
-    
-    rankBtn.disabled = true;
-    rankBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ranking...';
-    
-    try {
-        const response = await fetch(`${API_BASE}/rank/${currentJobId}?top_k=20`);
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.detail || data.error || 'Failed to rank results');
-        }
-        
-        if (data.success && data.ranked_results) {
-            renderPosts(data.ranked_results, true);
-            showNotification('Results ranked by relevance!', 'success');
-        } else {
-            throw new Error('No ranked results returned');
-        }
-        
-    } catch (error) {
-        console.error('Ranking error:', error);
-        showNotification(error.message, 'error');
-    } finally {
-        rankBtn.disabled = false;
-        rankBtn.innerHTML = '<i class="fas fa-sort-amount-down"></i> Rank by Relevance';
-    }
-});
 
 // =========================
 // EXPORT RESULTS
@@ -468,15 +424,16 @@ style.textContent = `
         right: 20px;
         background: white;
         padding: 16px 24px;
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        border-radius: 12px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.15);
         display: flex;
         align-items: center;
         gap: 12px;
         z-index: 1000;
         transform: translateX(400px);
-        transition: transform 0.3s ease;
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         max-width: 400px;
+        border: 1px solid rgba(0,0,0,0.08);
     }
     
     .notification.show {
@@ -513,8 +470,8 @@ style.textContent = `
     
     .notification span {
         flex: 1;
-        color: var(--dark);
-        font-weight: 500;
+        color: var(--text-primary);
+        font-weight: 600;
     }
 `;
 document.head.appendChild(style);
