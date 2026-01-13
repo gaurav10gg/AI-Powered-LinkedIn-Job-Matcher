@@ -11,6 +11,58 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+def is_job_related_post(content: str, author: str) -> bool:
+    """
+    Filter to check if post is actually job-related.
+    Returns True if post contains hiring keywords, False otherwise.
+    """
+    if not content:
+        return False
+    
+    content_lower = content.lower()
+    
+    # Strong hiring indicators
+    hiring_keywords = [
+        'hiring', 'recruiting', 'looking for', 'seeking', 'hiring for',
+        'we are hiring', "we're hiring", 'join our team', 'join us',
+        'open position', 'opening', 'opportunity', 'opening for',
+        'apply now', 'apply here', 'applications open', 'now hiring',
+        'job opening', 'career opportunity', 'careers', 'vacancy',
+        'come work', 'work with us', 'join the team', 'we need',
+        'position available', 'role available', 'actively hiring',
+        'currently hiring', 'internship opening', 'intern position',
+        'full-time position', 'part-time position', 'contract position',
+        'remote position', 'onsite position', 'hybrid position',
+        'send your resume', 'share your cv', 'interested candidates',
+        'dm to apply', 'comment to apply', 'link in comments'
+    ]
+    
+    # Check if any hiring keyword exists
+    has_hiring_keyword = any(keyword in content_lower for keyword in hiring_keywords)
+    
+    if not has_hiring_keyword:
+        return False
+    
+    # Additional validation: reject obvious non-job posts
+    rejection_keywords = [
+        'congratulations', 'congratulation', 'proud to announce',
+        'happy to share', 'excited to share', 'thrilled to announce',
+        'pleased to announce', 'won the award', 'received the award',
+        'launched our', 'released our', 'introducing our new',
+        'check out our', 'read our blog', 'watch our', 'article about',
+        'speaking at', 'will be speaking', 'attended the conference'
+    ]
+    
+    # If it has rejection keywords at the start, it's likely not a job post
+    first_100_chars = content_lower[:100]
+    has_rejection = any(keyword in first_100_chars for keyword in rejection_keywords)
+    
+    if has_rejection and not any(keyword in content_lower[100:] for keyword in hiring_keywords):
+        return False
+    
+    return True
+
+
 def extract_post_url(post):
     """
     Extract the actual LinkedIn post URL from a post element.
@@ -20,10 +72,8 @@ def extract_post_url(post):
     
     # Strategy 1: Look for the post link in the post container's data attributes
     try:
-        # Check if the post has a data-urn attribute
         urn = post.get_attribute("data-urn")
         if urn and "activity" in urn:
-            # Extract the activity ID from URN like "urn:li:activity:1234567890"
             activity_id = urn.split(":")[-1]
             post_url = f"https://www.linkedin.com/feed/update/urn:li:activity:{activity_id}/"
             return post_url
@@ -37,7 +87,6 @@ def extract_post_url(post):
             href = timestamp_link.get_attribute("href")
             if href:
                 post_url = href if href.startswith("http") else f"https://www.linkedin.com{href}"
-                # Clean up the URL (remove query parameters)
                 post_url = post_url.split("?")[0]
                 return post_url
     except:
@@ -82,20 +131,38 @@ def extract_post_url(post):
     return post_url
 
 
-def _scrape_query(page, query: str, limit: int = 5):
+def _scrape_query(page, query: str, limit: int = 5, time_filter: str = "past-week"):
     """
     Scrapes LinkedIn posts for a single search query.
+    Now with time filter and job keyword filtering!
+    
+    time_filter options:
+    - "past-24h" (Past 24 hours)
+    - "past-week" (Past week) - DEFAULT
+    - "past-month" (Past month)
     """
     try:
         print(f"  🔗 Navigating to search results...")
         
-        search_url = f"https://www.linkedin.com/search/results/content/?keywords={quote_plus(query)}"
+        # Build search URL with time filter - EXACT format from LinkedIn
+        base_url = f"https://www.linkedin.com/search/results/content/?keywords={quote_plus(query)}"
+        
+        # Add datePosted parameter with EXACT format: datePosted="past-week"
+        if time_filter == "past-24h":
+            base_url += '&datePosted=%22past-24h%22'
+        elif time_filter == "past-week":
+            base_url += '&datePosted=%22past-week%22'
+        elif time_filter == "past-month":
+            base_url += '&datePosted=%22past-month%22'
+        
+        search_url = base_url
+        print(f"  ⏰ Time filter: {time_filter}")
+        print(f"  🔗 URL: {search_url[:100]}...")
         
         try:
             page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
         except Exception as e:
             print(f"  ⚠️ Navigation issue: {e}")
-            # Try again with a longer timeout
             time.sleep(2)
             page.goto(search_url, wait_until="networkidle", timeout=40000)
         
@@ -130,8 +197,12 @@ def _scrape_query(page, query: str, limit: int = 5):
 
         results = []
         post_count = posts.count()
+        filtered_count = 0
 
-        for i in range(min(limit, post_count)):
+        for i in range(min(limit * 3, post_count)):  # Check more posts to account for filtering
+            if len(results) >= limit:  # Stop when we have enough valid posts
+                break
+                
             try:
                 post = posts.nth(i)
                 
@@ -153,13 +224,12 @@ def _scrape_query(page, query: str, limit: int = 5):
                         content_locator = post.locator(selector).first
                         if content_locator.count() > 0:
                             content = clean_text(content_locator.inner_text())
-                            if len(content) > 20:  # Minimum content length
+                            if len(content) > 20:
                                 break
                     except:
                         continue
 
                 if not content or len(content) < 20:
-                    print(f"  ⚠️ Post {i+1}: No content found, skipping")
                     continue
 
                 # Extract author
@@ -183,36 +253,38 @@ def _scrape_query(page, query: str, limit: int = 5):
                     except:
                         continue
 
-                # Extract POST URL (most important)
+                # 🔥 KEYWORD FILTERING - Check if post is job-related
+                if not is_job_related_post(content, author):
+                    filtered_count += 1
+                    print(f"  ⚠️ Post {i+1}: Filtered out (not job-related)")
+                    continue
+
+                # Extract POST URL
                 post_url = extract_post_url(post)
                 
                 if not post_url:
                     print(f"  ⚠️ Post {i+1}: Could not extract post URL")
                 
-                # Collect all links (post URL first, then others)
+                # Collect links
                 links = []
                 
-                # Add the main post URL first
                 if post_url:
                     links.append(post_url)
                 
-                # Extract additional links from the post content
                 try:
-                    # Look for external links in the post
                     anchor_selectors = [
-                        "a[href*='http']:not([href*='linkedin.com'])",  # External links
-                        "a.app-aware-link[href*='company']",  # Company pages
+                        "a[href*='http']:not([href*='linkedin.com'])",
+                        "a.app-aware-link[href*='company']",
                     ]
                     
                     for anchor_selector in anchor_selectors:
                         anchors = post.locator(anchor_selector)
-                        for j in range(min(2, anchors.count())):  # Limit to 2 additional links
+                        for j in range(min(2, anchors.count())):
                             try:
                                 href = anchors.nth(j).get_attribute("href")
                                 if href and href not in links:
                                     if not href.startswith("http"):
                                         href = f"https://www.linkedin.com{href}"
-                                    # Avoid author profile links
                                     if "/in/" not in href or len(links) == 0:
                                         links.append(href)
                             except:
@@ -223,19 +295,20 @@ def _scrape_query(page, query: str, limit: int = 5):
                 result = {
                     "query": query,
                     "author": author,
-                    "content": content[:500],  # Limit content length
-                    "post_url": post_url,  # Main post URL
-                    "links": links[:4]  # Limit to 4 links total
+                    "content": content[:500],
+                    "post_url": post_url,
+                    "links": links[:4]
                 }
                 
                 results.append(result)
                 post_link_status = "✓" if post_url else "✗"
-                print(f"  {post_link_status} Post {i+1}/{limit}: {author[:40]}... ({len(content)} chars) - Link: {post_link_status}")
+                print(f"  ✅ Post {len(results)}/{limit}: {author[:40]}... ({len(content)} chars) - {post_link_status}")
 
             except Exception as e:
                 print(f"  ⚠️ Error extracting post {i+1}: {str(e)[:100]}")
                 continue
 
+        print(f"  📊 Filtered out {filtered_count} non-job posts")
         return results
         
     except Exception as e:
@@ -243,15 +316,16 @@ def _scrape_query(page, query: str, limit: int = 5):
         return []
 
 
-# =========================
-# ✅ PUBLIC API (USED BY local_agent.py)
-# =========================
-def scrape_posts(queries, limit_per_query: int = 5):
+def scrape_posts(queries, limit_per_query: int = 5, time_filter: str = "past-week"):
     """
     Scrapes LinkedIn posts for multiple queries.
-    - Opens browser ONCE
-    - Login ONCE
-    - Goes directly to search after login
+    Now with time filtering and job keyword filtering!
+    
+    time_filter options: 
+    - "past-24h" - Last 24 hours
+    - "past-week" - Last week (DEFAULT)
+    - "past-month" - Last month
+    - None - All time
     """
 
     all_results = []
@@ -315,6 +389,8 @@ def scrape_posts(queries, limit_per_query: int = 5):
 
         print("\n" + "="*60)
         print("🔍 STEP 2: SCRAPING LINKEDIN POSTS")
+        print(f"⏰ Time Filter: {time_filter or 'None (all posts)'}")
+        print(f"🎯 Keyword Filtering: ENABLED (job posts only)")
         print("="*60 + "\n")
         
         for idx, query in enumerate(queries, 1):
@@ -325,11 +401,12 @@ def scrape_posts(queries, limit_per_query: int = 5):
             posts = _scrape_query(
                 page=page,
                 query=query,
-                limit=limit_per_query
+                limit=limit_per_query,
+                time_filter=time_filter
             )
             
             all_results.extend(posts)
-            print(f"✅ Collected {len(posts)} posts for this query\n")
+            print(f"✅ Collected {len(posts)} job posts for this query\n")
             
             if idx < len(queries):
                 wait_time = 4
@@ -340,6 +417,8 @@ def scrape_posts(queries, limit_per_query: int = 5):
         print(f"✅ SCRAPING COMPLETE!")
         print(f"📊 Total posts collected: {len(all_results)}")
         print(f"📊 Posts with URLs: {sum(1 for r in all_results if r.get('post_url'))}")
+        print(f"🎯 All posts are job-related (keyword filtered)")
+        print(f"⏰ All posts are from: {time_filter or 'all time'}")
         print("="*60 + "\n")
 
         browser.close()
